@@ -68,3 +68,26 @@ B3 — «Что написано в документе D08 и нужно ли в
   различались между запусками, так что выводы предварительные.
 - `max_output_tokens=700` вместо 350 из `direct/`. A1/A2/B4/B3 Qwen (1-й запуск) шли через `agent.py`, B4 Qwen (2-й запуск)
   и все прогоны Gemma — через `run_logged.py`. Агент один и тот же, у обёртки другой только формат журнала при ошибке.
+
+## Как это воспроизвести
+
+- **Python:** 3.14.7 (агенту нужен 3.11+, без зависимостей). macOS (Darwin 25.6), LM Studio, OpenAI-совместимый сервер на `http://localhost:1234/v1`.
+- **Модели** (id из `GET /v1/models`, движок MLX, квантование 4bit):
+
+  | id | arch | max context | загруженный контекст |
+  |---|---|---|---|
+  | `qwen/qwen3.5-9b` | qwen3_5 | 262144 | не зафиксирован: модель выгружена до записи, рекомендуется ≥ 4096 |
+  | `google/gemma-4-12b` | gemma4_unified | 262144 | 8192 |
+
+  Thinking оставлен как по умолчанию. В памяти одна модель за раз.
+- **Параметры агента:** `temperature=0`, `max_model_calls=6`, `max_tool_calls=12`, `max_output_tokens=700`, `timeout_seconds=120`.
+- **Дата и время прогонов** (время записи журналов, локальное): 15.11.2026.
+  Qwen: 18:38:40 (A1) – 18:41:03 (B4, 2-я попытка). Gemma: 18:45:26 (A1) – 18:46:43 (B3).
+- **Команды** (из `live-local/`):
+
+      python3 -m unittest discover -s tests -v                      # без сети
+      python3 agent.py --live --config config.qwen.json --output ../logs-live/qwen_q1.json
+      sh run_set.sh qwen                                            # A2, B4, B3 через agent.py
+      python3 run_logged.py --config config.gemma.json --output ../logs-live/gemma_q1.json "<вопрос>"
+
+  Тексты вопросов приведены в разделе «Живой прогон» и в `run_set.sh`.
