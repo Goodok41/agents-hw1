@@ -40,7 +40,7 @@ class AgentError(Exception):
 def load_config(path=None):
     cfg = json.loads(Path(path or ROOT / "config.json").read_text(encoding="utf-8"))
     local = cfg.get("api_base") == LOCAL_BASE
-    for name, lo, hi in [("max_model_calls", 1, 8), ("max_tool_calls", 1, 16), ("max_output_tokens", 8, 700), ("timeout_seconds", 1, 120 if local else 60)]:
+    for name, lo, hi in [("max_model_calls", 1, 8), ("max_tool_calls", 1, 16), ("max_output_tokens", 8, 32768 if local else 700), ("timeout_seconds", 1, 300 if local else 60)]:
         if type(cfg.get(name)) is not int or not lo <= cfg[name] <= hi:
             raise AgentError(f"Проверьте {name}: нужно целое число от {lo} до {hi}.")
     if cfg.get("api_base") not in (YANDEX_BASE, LOCAL_BASE):
