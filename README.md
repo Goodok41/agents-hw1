@@ -5,6 +5,7 @@
 - `change-brief.md` · общее изменение; `prompts.txt` · промпты; `report.md` · отчёт; `logs/` · реальные логи
 - Модель: Claude Sonnet 5.5, 15.11.2026. Живой прогон на локальных моделях (LM Studio): live-local/, см. report.md, раздел «Дополнение»; ключей в репозитории нет.
 - `opus/`, `logs-opus/` · повтор обеих попыток на Claude Opus 5.5 в раздельных сессиях с брифом `change-brief-full.md` (report.md, «Дополнение 2»)
+- `sonnet/`, `logs-sonnet/` · повтор обеих попыток на Claude Sonnet 5.5 в раздельных сессиях (report.md, «Дополнение 2»)
 
 Запуск (в папке direct или with-spec):
     python tests/test_agent.py

@@ -1,0 +1,15 @@
+test_answer_confirmed_by_read_docs (__main__.A1_SearchAndRead.test_answer_confirmed_by_read_docs) ... ok
+test_snippet_only_answer_is_sent_back_then_accepted (__main__.A1_SearchAndRead.test_snippet_only_answer_is_sent_back_then_accepted) ... ok
+test_price_absent_in_d03 (__main__.A2_NoAnswerInCorpus.test_price_absent_in_d03) ... ok
+test_citing_missing_doc_is_never_accepted (__main__.A3_UnknownIdAndBadArguments.test_citing_missing_doc_is_never_accepted) ... ok
+test_structured_errors_without_crash (__main__.A3_UnknownIdAndBadArguments.test_structured_errors_without_crash) ... ok
+test_failure_is_logged_and_agent_recovers (__main__.A4_ToolFailure.test_failure_is_logged_and_agent_recovers) ... ok
+test_persistent_failure_ends_with_clear_status (__main__.A4_ToolFailure.test_persistent_failure_ends_with_clear_status) ... ok
+test_model_call_limit (__main__.A5_LimitStopsLoop.test_model_call_limit) ... ok
+test_tool_call_limit (__main__.A5_LimitStopsLoop.test_tool_call_limit) ... ok
+test_replay_still_works (__main__.Regression_Replay.test_replay_still_works) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.002s
+
+OK
