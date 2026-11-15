@@ -1,15 +1,14 @@
 """Таблица токенов живого прогона: суммирует usage вызовов модели и печатает markdown.
 
-Обрабатывает logs-live/*.json (лимит ответа 700) и logs-live/nolimit/*.json (лимит 8000),
-для каждого каталога печатается отдельная таблица. Журналы с agent_error (run_logged.py)
-учитываются по partial_model_calls. Время берётся из logs-live/nolimit/times.json, если есть.
+Обрабатывает logs-live/*.json (лимит ответа 8000, контекст 16384). Журналы с agent_error (run_logged.py)
+учитываются по partial_model_calls. Время берётся из logs-live/times.json, если есть.
 """
 import json
 from pathlib import Path
 
 LOGS = Path(__file__).resolve().parents[1] / "logs-live"
 MODELS = {"qwen": "qwen/qwen3.5-9b", "gemma": "google/gemma-4-12b"}
-SETS = [("Лимит ответа 700", LOGS, 700), ("Без лимита ответа (8000)", LOGS / "nolimit", 8000)]
+LIMIT = 8000
 
 
 def model_usages(log):
@@ -40,6 +39,4 @@ def table(directory, limit):
 
 
 if __name__ == "__main__":
-    for title, directory, limit in SETS:
-        if directory.is_dir():
-            print(f"### {title}\n\n{table(directory, limit)}\n")
+    print(table(LOGS, LIMIT))

@@ -21,7 +21,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "logs-live" / "agents"
-CONFIG = REPO / "live-local" / "config.qwen.nolimit.json"
+CONFIG = REPO / "live-local" / "config.qwen.json"
 IMPLEMENTATIONS = {  # имя -> папка
     "direct": "direct", "with-spec": "with-spec",
     "sonnet-direct": "sonnet/direct", "sonnet-with-spec": "sonnet/with-spec",
