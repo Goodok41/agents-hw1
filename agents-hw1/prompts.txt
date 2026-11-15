@@ -1,0 +1,22 @@
+HW1 · вариант C · тексты промптов. Модель: Claude Sonnet 5.5 (claude-sonnet-5-5), одна сессия 15.11.2026.
+Ключ API в промптах и файлах отсутствует.
+
+=== 0. Выбор изменения (общий для обеих попыток), файл change-brief.md ===
+Изменение: явная обработка отсутствующего документа и проверка источников (R1-R6, см. change-brief.md).
+
+=== 1. direct ===
+Прочитай agent.py, docs.json и config.json. Выполни выбранное изменение из change-brief.md.
+Сохрани интерфейс search_docs/read_doc, ограниченный цикл, журнал и проверку источников. Не создавай
+OpenSpec-артефакты. Подготовь пять тестов A1-A5 из ДЗ, выполни доступные проверки. Отдельно пометь, где
+использована живая модель, а где заглушка или Replay. Не меняй ожидаемые результаты ради прохождения тестов.
+
+Уточнение direct-2 (исправление моего теста, не агента): в тесте A3 поиск «прокси» находит D07, а старая
+проверка источников требует прочитать найденное; сценарий дополнен чтением D07.
+
+=== 2. with-spec ===
+2a. openspec init --tools opencode --language ru ; openspec new change harden-agent
+2b. Подготовь proposal.md, specs/agent/spec.md (MUST + WHEN/THEN), design.md, tasks.md по change-brief.md.
+    Код пока не пиши.
+2c. openspec validate harden-agent --strict --no-interactive  (результат: valid с первого раза)
+2d. Реализуй harden-agent по spec.md и tasks.md. Те же тесты A1-A5, что в direct. Отмечай в tasks.md
+    только выполненное.

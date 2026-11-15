@@ -1,0 +1,110 @@
+test_answer_confirmed_by_read_docs (__main__.A1_SearchAndRead.test_answer_confirmed_by_read_docs) ... ERROR
+test_snippet_only_answer_is_sent_back_then_accepted (__main__.A1_SearchAndRead.test_snippet_only_answer_is_sent_back_then_accepted) ... FAIL
+test_price_absent_in_d03 (__main__.A2_NoAnswerInCorpus.test_price_absent_in_d03) ... ERROR
+test_citing_missing_doc_is_never_accepted (__main__.A3_UnknownIdAndBadArguments.test_citing_missing_doc_is_never_accepted) ... FAIL
+test_structured_errors_without_crash (__main__.A3_UnknownIdAndBadArguments.test_structured_errors_without_crash) ... ERROR
+test_failure_is_logged_and_agent_recovers (__main__.A4_ToolFailure.test_failure_is_logged_and_agent_recovers) ... ERROR
+test_persistent_failure_ends_with_clear_status (__main__.A4_ToolFailure.test_persistent_failure_ends_with_clear_status) ... ERROR
+test_model_call_limit (__main__.A5_LimitStopsLoop.test_model_call_limit) ... ok
+test_tool_call_limit (__main__.A5_LimitStopsLoop.test_tool_call_limit) ... ok
+test_replay_still_works (__main__.Regression_Replay.test_replay_still_works) ... ERROR
+
+======================================================================
+ERROR: test_answer_confirmed_by_read_docs (__main__.A1_SearchAndRead.test_answer_confirmed_by_read_docs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 49, in test_answer_confirmed_by_read_docs
+    self.assertEqual(r["read_ids"], ["D01", "D02"])
+                     ~^^^^^^^^^^^^
+KeyError: 'read_ids'
+
+======================================================================
+ERROR: test_price_absent_in_d03 (__main__.A2_NoAnswerInCorpus.test_price_absent_in_d03)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 68, in test_price_absent_in_d03
+    self.assertEqual(r["read_ids"], ["D03"])
+                     ~^^^^^^^^^^^^
+KeyError: 'read_ids'
+
+======================================================================
+ERROR: test_structured_errors_without_crash (__main__.A3_UnknownIdAndBadArguments.test_structured_errors_without_crash)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 81, in test_structured_errors_without_crash
+    self.assertEqual(r["missing_ids"], ["D99"])
+                     ~^^^^^^^^^^^^^^^
+KeyError: 'missing_ids'
+
+======================================================================
+ERROR: test_failure_is_logged_and_agent_recovers (__main__.A4_ToolFailure.test_failure_is_logged_and_agent_recovers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 100, in test_failure_is_logged_and_agent_recovers
+    r = run(Script(tools(call("search_docs", query="скан")), tools(call("read_doc", doc_id="D01")),
+        ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   tools(call("read_doc", doc_id="D01")), text("После OCR проверьте данные [D01:1-2].")))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/tests/test_agent.py", line 41, in run
+    return agent.run_agent("тест", cfg or CFG, model, "STUB", emit=lambda *_: None)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/agent.py", line 165, in run_agent
+    result = run_allowed_tool(fn["name"], fn["arguments"], docs)
+  File "/tmp/basecheck/tests/test_agent.py", line 97, in flaky
+    raise RuntimeError("секретный-ключ-не-должен-попасть-в-журнал")
+RuntimeError: секретный-ключ-не-должен-попасть-в-журнал
+
+======================================================================
+ERROR: test_persistent_failure_ends_with_clear_status (__main__.A4_ToolFailure.test_persistent_failure_ends_with_clear_status)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 111, in test_persistent_failure_ends_with_clear_status
+    r = run(Script(tools(call("read_doc", doc_id="D01")), repeat_last=True))
+  File "/tmp/basecheck/tests/test_agent.py", line 41, in run
+    return agent.run_agent("тест", cfg or CFG, model, "STUB", emit=lambda *_: None)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/agent.py", line 165, in run_agent
+    result = run_allowed_tool(fn["name"], fn["arguments"], docs)
+  File "/tmp/basecheck/tests/test_agent.py", line 109, in broken
+    raise OSError("диск недоступен")
+OSError: диск недоступен
+
+======================================================================
+ERROR: test_replay_still_works (__main__.Regression_Replay.test_replay_still_works)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 129, in test_replay_still_works
+    self.assertEqual((r["stop_reason"], r["read_ids"], r["model_calls"]), ("final_answer", ["D01", "D02"], 4))
+                                        ~^^^^^^^^^^^^
+KeyError: 'read_ids'
+
+======================================================================
+FAIL: test_snippet_only_answer_is_sent_back_then_accepted (__main__.A1_SearchAndRead.test_snippet_only_answer_is_sent_back_then_accepted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 60, in test_snippet_only_answer_is_sent_back_then_accepted
+    self.assertIn("D01", m.histories[2][-1]["content"])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'D01' not found in 'Проверка программы: для подтверждения ответа сначала нужен search_docs, затем read_doc найденных документов. Нельзя ссылаться на номера строк по поисковому сниппету.'
+
+======================================================================
+FAIL: test_citing_missing_doc_is_never_accepted (__main__.A3_UnknownIdAndBadArguments.test_citing_missing_doc_is_never_accepted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/basecheck/tests/test_agent.py", line 87, in test_citing_missing_doc_is_never_accepted
+    r = run(Script(tools(call("search_docs", query="прокси")), tools(call("read_doc", doc_id="D99")), lie, lie, lie))
+        ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/tests/test_agent.py", line 41, in run
+    return agent.run_agent("тест", cfg or CFG, model, "STUB", emit=lambda *_: None)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/agent.py", line 132, in run_agent
+    reply, usage = model_fn(history, TOOLS)
+                   ~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/tmp/basecheck/tests/test_agent.py", line 37, in __call__
+    raise AssertionError("заглушка исчерпана")
+AssertionError: заглушка исчерпана
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.008s
+
+FAILED (failures=2, errors=6)
