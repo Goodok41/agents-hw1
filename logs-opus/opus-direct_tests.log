@@ -1,0 +1,21 @@
+test_a1_direct_tool_call (__main__.TestAgent.test_a1_direct_tool_call) ... ok
+test_a1_unknown_doc_id_is_not_found_and_in_missing_ids (__main__.TestAgent.test_a1_unknown_doc_id_is_not_found_and_in_missing_ids) ... ok
+test_a2_tool_exception_becomes_tool_failure_and_loop_continues (__main__.TestAgent.test_a2_tool_exception_becomes_tool_failure_and_loop_continues) ... ok
+test_a2_tool_failure_respects_limits (__main__.TestAgent.test_a2_tool_failure_respects_limits) ... ok
+test_a3_at_most_two_remarks_then_unverified_sources (__main__.TestAgent.test_a3_at_most_two_remarks_then_unverified_sources) ... ok
+test_a3_citation_formats (__main__.TestAgent.test_a3_citation_formats) ... ok
+test_a3_citation_of_missing_doc_is_rejected (__main__.TestAgent.test_a3_citation_of_missing_doc_is_rejected) ... ok
+test_a3_remark_names_unread_ids_then_success (__main__.TestAgent.test_a3_remark_names_unread_ids_then_success) ... ok
+test_a4_limits_not_relaxed_by_remarks (__main__.TestAgent.test_a4_limits_not_relaxed_by_remarks) ... ok
+test_a4_model_budget_exhausted (__main__.TestAgent.test_a4_model_budget_exhausted) ... ok
+test_a4_tool_budget_exhausted (__main__.TestAgent.test_a4_tool_budget_exhausted) ... ok
+test_a5_summary_fields_present_on_every_stop_reason (__main__.TestAgent.test_a5_summary_fields_present_on_every_stop_reason) ... ok
+test_a5_trace_status_and_summary_fields (__main__.TestAgent.test_a5_trace_status_and_summary_fields) ... ok
+test_r6_tool_interface_unchanged (__main__.TestAgent.test_r6_tool_interface_unchanged) ... ok
+test_replay_regression_cli (__main__.TestAgent.test_replay_regression_cli) ... ok
+test_replay_regression_run_agent (__main__.TestAgent.test_replay_regression_run_agent) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.003s
+
+OK

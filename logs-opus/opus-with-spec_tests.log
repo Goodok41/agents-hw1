@@ -1,0 +1,22 @@
+test_citing_missing_id_is_not_accepted (__main__.TestA1MissingDocument.test_citing_missing_id_is_not_accepted) ... ok
+test_missing_id_in_final_result (__main__.TestA1MissingDocument.test_missing_id_in_final_result) ... ok
+test_tool_returns_structured_not_found (__main__.TestA1MissingDocument.test_tool_returns_structured_not_found) ... ok
+test_always_failing_tool_stays_within_limits (__main__.TestA2ToolFailure.test_always_failing_tool_stays_within_limits) ... ok
+test_exception_becomes_tool_failure_and_loop_continues (__main__.TestA2ToolFailure.test_exception_becomes_tool_failure_and_loop_continues) ... ok
+test_answer_accepted_after_reading (__main__.TestA3SourceVerification.test_answer_accepted_after_reading) ... ok
+test_answer_without_search_is_not_accepted (__main__.TestA3SourceVerification.test_answer_without_search_is_not_accepted) ... ok
+test_unverified_answer_stops_after_two_remarks (__main__.TestA3SourceVerification.test_unverified_answer_stops_after_two_remarks) ... ok
+test_model_budget_exhausted (__main__.TestA4ModelBudget.test_model_budget_exhausted) ... ok
+test_remarks_do_not_extend_model_budget (__main__.TestA4ModelBudget.test_remarks_do_not_extend_model_budget) ... ok
+test_tool_budget_exhausted (__main__.TestA5ToolBudget.test_tool_budget_exhausted) ... ok
+test_live_model_cannot_reach_network (__main__.TestNetworkIsBlocked.test_live_model_cannot_reach_network) ... ok
+test_socket_connection_blocked (__main__.TestNetworkIsBlocked.test_socket_connection_blocked) ... ok
+test_replay_cli_output (__main__.TestReplayRegression.test_replay_cli_output) ... ok
+test_replay_run_agent (__main__.TestReplayRegression.test_replay_run_agent) ... ok
+test_successful_result_shapes (__main__.TestToolInterfaceCompat.test_successful_result_shapes) ... ok
+test_tool_schema (__main__.TestToolInterfaceCompat.test_tool_schema) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 0.010s
+
+OK
