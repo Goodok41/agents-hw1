@@ -1,0 +1,54 @@
+--- a/sonnet/with-spec/agent.py
++++ b/sonnet/with-spec/agent.py
+@@ -15,6 +15,9 @@
+ from urllib.request import Request, build_opener, HTTPRedirectHandler
+ 
+ ROOT = Path(__file__).resolve().parent
++YANDEX_BASE = "https://ai.api.cloud.yandex.net/v1"
++LOCAL_BASE = "http://localhost:1234/v1"  # LM Studio, OpenAI-совместимый сервер
++LOCAL_KEY = "lm-studio"  # заглушка: локальному серверу ключ не нужен
+ QUESTION = "Как обработать скан и что проверить перед отправкой текста во внешний API? Укажи источники."
+ SYSTEM = """Ты помощник по документации вымышленного приложения DemoDesk.
+ Отвечай только по учебному корпусу. Сначала найди документы через search_docs,
+@@ -36,12 +39,16 @@
+ 
+ def load_config(path=None):
+     cfg = json.loads(Path(path or ROOT / "config.json").read_text(encoding="utf-8"))
+-    for name, lo, hi in [("max_model_calls", 1, 8), ("max_tool_calls", 1, 16), ("max_output_tokens", 8, 700), ("timeout_seconds", 1, 60)]:
++    local = cfg.get("api_base") == LOCAL_BASE
++    for name, lo, hi in [("max_model_calls", 1, 8), ("max_tool_calls", 1, 16), ("max_output_tokens", 8, 32768 if local else 700), ("timeout_seconds", 1, 300 if local else 60)]:
+         if type(cfg.get(name)) is not int or not lo <= cfg[name] <= hi:
+             raise AgentError(f"Проверьте {name}: нужно целое число от {lo} до {hi}.")
+-    if cfg.get("api_base") != "https://ai.api.cloud.yandex.net/v1":
+-        raise AgentError("В учебном примере разрешён только официальный API Яндекса.")
+-    if not re.fullmatch(r"gpt://[a-z0-9]+/aliceai-llm-flash", cfg.get("model", "")):
++    if cfg.get("api_base") not in (YANDEX_BASE, LOCAL_BASE):
++        raise AgentError("Разрешены только официальный API Яндекса и локальный LM Studio.")
++    if local:
++        if not re.fullmatch(r"[\w.\-]+(/[\w.\-]+)?", cfg.get("model", "")):
++            raise AgentError("Проверьте model в config.json.")
++    elif not re.fullmatch(r"gpt://[a-z0-9]+/aliceai-llm-flash", cfg.get("model", "")):
+         raise AgentError("Проверьте model в config.json.")
+     return cfg
+ 
+@@ -104,8 +111,9 @@
+                    "max_tokens": cfg["max_output_tokens"], "temperature": 0}
+         if tools:
+             payload.update(tools=tools, tool_choice="auto")
+-        headers = {"Content-Type": "application/json", "Authorization": "Api-Key " + key,
+-                   "OpenAI-Project": cfg["model"].split("/")[2], "x-data-logging-enabled": "false"}
++        headers = {"Content-Type": "application/json", "Authorization": "Api-Key " + key}
++        if cfg["api_base"] == YANDEX_BASE:
++            headers.update({"OpenAI-Project": cfg["model"].split("/")[2], "x-data-logging-enabled": "false"})
+         request = Request(cfg["api_base"] + "/chat/completions", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers)
+         try:
+             with build_opener(NoRedirect()).open(request, timeout=cfg["timeout_seconds"]) as response:
+@@ -227,7 +235,7 @@
+             mode, question, model_fn = "REPLAY", QUESTION, make_replay_model()
+             print("REPLAY: фиксированные решения модели. Инструменты выполняются локально. Новая инструкция этой записью не проверяется.")
+         else:
+-            key = os.getenv("AGENT_API_KEY") or getpass.getpass("Учебный ключ (ввод не виден): ").strip()
++            key = LOCAL_KEY if cfg["api_base"] == LOCAL_BASE else os.getenv("AGENT_API_KEY") or getpass.getpass("Учебный ключ (ввод не виден): ").strip()
+             if not key:
+                 raise AgentError("Ключ не введён.")
+             model_fn = make_live_model(cfg, key)
