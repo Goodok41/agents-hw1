@@ -83,7 +83,8 @@ def run_allowed_tool(name, arguments, docs):
         return {"documents": [{"id": d["id"], "title": d["title"], "snippet": d["text"][:140]} for score, d in ranked[:4] if score]}
     doc = next((d for d in docs if d["id"] == args["doc_id"]), None)
     if doc is None:
-        return {"error": {"code": "not_found", "message": "Документ с таким ID не найден.", "doc_id": args["doc_id"]}}
+        # R1: структурированная ошибка; содержимое не подставляется.
+        return {"error": {"code": "not_found", "message": "Документ с таким ID не найден.", "doc_id": args["doc_id"].strip()}}
     return {"id": doc["id"], "title": doc["title"], "version": doc.get("version", "учебная"),
             "lines": [{"line": i, "text": line} for i, line in enumerate(doc["text"].splitlines(), 1)]}
 
@@ -124,32 +125,33 @@ def make_live_model(cfg, key):
             raise AgentError("Неожиданный формат ответа API.") from None
     return call_model
 
-MAX_SOURCE_REMARKS = 2
-# Ссылка на источник: ID внутри [...] или (...), за которым идёт ":", ",", ";" или закрывающая скобка.
-# Поддерживает [D01:1-3], (D01), [D01:1-2; D02:3], (D01, D02). Простое упоминание «документа D99 нет» не считается ссылкой.
-CITATION_GROUP = re.compile(r"[\[(]([^\[\]()]*)[\])]")
-CITATION_ID = re.compile(r"\b(D\d{2})(?=\s*[:,;]|\s*$)")
+MAX_SOURCE_REMARKS = 2  # R4: не более двух замечаний модели за запуск
 
-def cited_ids_in(answer):
-    return {doc_id for group in CITATION_GROUP.findall(answer) for doc_id in CITATION_ID.findall(group)}
-
-def safe_run_tool(name, arguments, docs):
-    """R2: исключение внутри инструмента превращается в структурированную ошибку, процесс не падает."""
+def call_tool_safely(name, arguments, docs):
+    """R2: исключение внутри инструмента превращается в структурированный результат."""
     try:
         return run_allowed_tool(name, arguments, docs)
-    except Exception as exc:  # noqa: BLE001 — намеренно ловим всё, что вышло из инструмента
-        return {"error": {"code": "tool_failure", "message": f"Сбой инструмента: {type(exc).__name__}."}}
+    except Exception as exc:  # noqa: BLE001 — намеренно ловим любой сбой инструмента
+        return {"error": {"code": "tool_failure", "message": f"Сбой инструмента {name}: {type(exc).__name__}."}}
 
-def tool_status(result):
-    return "error" if isinstance(result, dict) and "error" in result else "ok"
-
-def source_summary(trace):
+def summarize_tools(trace):
+    """R3: успешно прочитанные ID, отсутствующие ID и число ошибок инструментов."""
     tools = [event for event in trace if event["event"] == "tool"]
     read_ids = sorted({e["result"]["id"] for e in tools if e["name"] == "read_doc" and e["status"] == "ok"})
-    missing_ids = sorted({e["result"]["error"]["doc_id"] for e in tools
-                          if e["name"] == "read_doc" and e["status"] == "error"
-                          and e["result"]["error"].get("code") == "not_found" and "doc_id" in e["result"]["error"]})
+    missing_ids = sorted({e["result"]["error"]["doc_id"] for e in tools if e["status"] == "error"
+                          and e["result"]["error"].get("code") == "not_found" and e["result"]["error"].get("doc_id")})
     return {"read_ids": read_ids, "missing_ids": missing_ids, "tool_errors": sum(e["status"] == "error" for e in tools)}
+
+def unverified_ids(answer, trace):
+    """R4: ID, на которые ответ ссылается без успешного read_doc.
+    Ссылка в скобках ([D01:1-3], (D02), [D01, D02]) допустима только на прочитанный документ.
+    Упоминание без скобок допустимо для прочитанного ID или ID из missing_ids
+    (например, «документ D99 не найден»)."""
+    info = summarize_tools(trace)
+    read, missing = set(info["read_ids"]), set(info["missing_ids"])
+    bracketed = {i for group in re.findall(r"[\[(]([^\[\]()]*)[\])]", answer) for i in re.findall(r"\bD\d{2}\b", group)}
+    mentioned = set(re.findall(r"\bD\d{2}\b", answer))
+    return sorted((bracketed - read) | (mentioned - read - missing))
 
 def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
     docs = load_docs()
@@ -158,7 +160,7 @@ def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
 
     def finish(stop_reason, model_calls, answer=None):
         return {"mode": mode, "question": question, "stop_reason": stop_reason, "model_calls": model_calls,
-                "tool_calls": tool_count, "answer": answer, **source_summary(trace), "trace": trace}
+                "tool_calls": tool_count, "answer": answer, **summarize_tools(trace), "trace": trace}
 
     for step in range(cfg["max_model_calls"]):
         reply, usage = model_fn(history, TOOLS)
@@ -171,23 +173,24 @@ def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
             answer = reply.get("content")
             if not isinstance(answer, str) or not answer.strip():
                 raise AgentError("Модель не вернула текст или действие.")
-            read_ids = set(source_summary(trace)["read_ids"])
-            unread = sorted(cited_ids_in(answer) - read_ids)
-            tools = [event for event in trace if event["event"] == "tool"]
-            searched = any(e["name"] == "search_docs" and e["status"] == "ok" for e in tools)
-            found_docs = any(e["name"] == "search_docs" and e["status"] == "ok" and e["result"].get("documents") for e in tools)
-            if not searched or unread or (found_docs and not read_ids):
-                trace.append({"event": "validation", "error": "unread_sources", "unread_ids": unread})
+            read_ids = set(summarize_tools(trace)["read_ids"])
+            bad_ids = unverified_ids(answer, trace)
+            searched = any(event["event"] == "tool" and event["name"] == "search_docs" for event in trace)
+            found_ids = sorted({d["id"] for event in trace if event["event"] == "tool" and event["name"] == "search_docs"
+                                and event["status"] == "ok" for d in event["result"].get("documents", [])})
+            if not searched or bad_ids or (found_ids and not read_ids):
+                ids = bad_ids or ([] if read_ids else found_ids)
+                trace.append({"event": "validation", "error": "unread_sources", "ids": ids, "remark": remarks + 1})
                 if remarks >= MAX_SOURCE_REMARKS:
-                    emit("[проверка] Источники не подтверждены, лимит замечаний исчерпан. Ответ не выдаётся.")
+                    emit("[проверка] Источники не подтверждены после двух замечаний. Ответ не выдаётся.")
                     return finish("unverified_sources", step + 1)
                 remarks += 1
-                if unread:
-                    note = ("Проверка программы: ответ ссылается на непрочитанные документы: " + ", ".join(unread)
-                            + ". Прочитайте их через read_doc или уберите эти ссылки. Нельзя ссылаться на номера строк по поисковому сниппету.")
-                else:
-                    note = "Проверка программы: для подтверждения ответа сначала нужен search_docs, затем read_doc найденных документов. Нельзя ссылаться на номера строк по поисковому сниппету."
-                emit(f"[проверка {remarks}/{MAX_SOURCE_REMARKS}] Источники не прочитаны" + (": " + ", ".join(unread) if unread else "") + ". Нужен read_doc.")
+                emit("[проверка] Источники ещё не прочитаны. Нужен read_doc." + (f" ID: {', '.join(ids)}" if ids else ""))
+                note = "Проверка программы: для подтверждения ответа сначала нужен search_docs, затем read_doc найденных документов. Нельзя ссылаться на номера строк по поисковому сниппету."
+                if bad_ids:
+                    note += f" Ответ ссылается на непрочитанные документы: {', '.join(bad_ids)}. Прочитайте их через read_doc или уберите ссылки."
+                elif ids:
+                    note += f" Найдены, но не прочитаны: {', '.join(ids)}."
                 history.extend([reply, {"role": "user", "content": note}])
                 continue
             return finish("final_answer", step + 1, answer)
@@ -204,11 +207,14 @@ def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
         history.append({"role": "assistant", "content": reply.get("content"), "tool_calls": calls})
         for call in calls:
             fn = call["function"]
-            result = safe_run_tool(fn["name"], fn["arguments"], docs)
+            result = call_tool_safely(fn["name"], fn["arguments"], docs)
+            if not isinstance(result, dict):
+                result = {"error": {"code": "tool_failure", "message": f"Сбой инструмента {fn['name']}: некорректный результат."}}
+            status = "error" if "error" in result else "ok"
             tool_count += 1
             emit(f"[инструмент {tool_count}] {fn['name']} {fn['arguments']}")
             emit(json.dumps(result, ensure_ascii=False))
-            trace.append({"event": "tool", "name": fn["name"], "arguments": fn["arguments"], "status": tool_status(result), "result": result})
+            trace.append({"event": "tool", "name": fn["name"], "arguments": fn["arguments"], "status": status, "result": result})
             history.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
     return finish("budget_exhausted", cfg["max_model_calls"])
 
@@ -254,6 +260,7 @@ def main():
         print("Режим:", mode, "\nВопрос:", question)
         result = run_agent(question, cfg, model_fn, mode)
         print("\nstop_reason:", result["stop_reason"])
+        print("read_ids:", result["read_ids"], "missing_ids:", result["missing_ids"], "tool_errors:", result["tool_errors"])
         print("Ответ:", result["answer"] or "Финального ответа нет. Работа остановлена по ограничению.")
         if args.output:
             Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
