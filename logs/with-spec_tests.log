@@ -1,15 +1,14 @@
-test_answer_confirmed_by_read_docs (__main__.A1_SearchAndRead.test_answer_confirmed_by_read_docs) ... ok
-test_snippet_only_answer_is_sent_back_then_accepted (__main__.A1_SearchAndRead.test_snippet_only_answer_is_sent_back_then_accepted) ... ok
-test_price_absent_in_d03 (__main__.A2_NoAnswerInCorpus.test_price_absent_in_d03) ... ok
-test_citing_missing_doc_is_never_accepted (__main__.A3_UnknownIdAndBadArguments.test_citing_missing_doc_is_never_accepted) ... ok
-test_structured_errors_without_crash (__main__.A3_UnknownIdAndBadArguments.test_structured_errors_without_crash) ... ok
-test_failure_is_logged_and_agent_recovers (__main__.A4_ToolFailure.test_failure_is_logged_and_agent_recovers) ... ok
-test_persistent_failure_ends_with_clear_status (__main__.A4_ToolFailure.test_persistent_failure_ends_with_clear_status) ... ok
-test_model_call_limit (__main__.A5_LimitStopsLoop.test_model_call_limit) ... ok
-test_tool_call_limit (__main__.A5_LimitStopsLoop.test_tool_call_limit) ... ok
-test_replay_still_works (__main__.Regression_Replay.test_replay_still_works) ... ok
+test_a1_ocr_and_external_api_confirmed_by_d01_d02 (__main__.AgentTests.test_a1_ocr_and_external_api_confirmed_by_d01_d02) ... ok
+test_a2_license_price_absent_not_invented (__main__.AgentTests.test_a2_license_price_absent_not_invented) ... ok
+test_a3_unknown_id_and_bad_arguments_structured_errors (__main__.AgentTests.test_a3_unknown_id_and_bad_arguments_structured_errors) ... ok
+test_a4_persistent_failure_ends_with_clear_status (__main__.AgentTests.test_a4_persistent_failure_ends_with_clear_status) ... ok
+test_a4_read_doc_failure_is_recorded_and_agent_recovers (__main__.AgentTests.test_a4_read_doc_failure_is_recorded_and_agent_recovers) ... ok
+test_a5_reduced_limits_stop_loop_without_answer (__main__.AgentTests.test_a5_reduced_limits_stop_loop_without_answer) ... ok
+test_r4_notice_names_ids_then_unverified_sources_after_two (__main__.AgentTests.test_r4_notice_names_ids_then_unverified_sources_after_two) ... ok
+test_regression_replay_cli_works_as_before (__main__.AgentTests.test_regression_replay_cli_works_as_before) ... ok
+test_regression_replay_run_agent_and_tool_interface (__main__.AgentTests.test_regression_replay_run_agent_and_tool_interface) ... ok
 
 ----------------------------------------------------------------------
-Ran 10 tests in 0.005s
+Ran 9 tests in 0.040s
 
 OK

@@ -1,7 +1,7 @@
 """Таблица токенов живого прогона: суммирует usage вызовов модели и печатает markdown.
 
-Обрабатывает logs-live/*.json (лимит ответа 8000, контекст 16384). Журналы с agent_error (run_logged.py)
-учитываются по partial_model_calls. Время берётся из logs-live/times.json, если есть.
+Обрабатывает logs-live/*.json (лимит ответа 8000, контекст 16384). Журналы Qwen сняты run_all_agents.py
+(реализация direct), журналы Gemma — run_logged.py; журналы с agent_error учитываются по partial_model_calls. Время берётся из logs-live/times.json, если есть.
 """
 import json
 from pathlib import Path
@@ -12,7 +12,11 @@ LIMIT = 8000
 
 
 def model_usages(log):
-    calls = [e for e in log.get("trace", []) if e.get("event") == "model"] or log.get("partial_model_calls", [])
+    """Два формата журнала: run_logged.py (результат run_agent в корне) и run_all_agents.py (в поле result)."""
+    trace = log.get("trace") or (log.get("result") or {}).get("trace") or []
+    calls = [e for e in trace if e.get("event") == "model"] or log.get("partial_model_calls") or log.get("model_calls") or []
+    if isinstance(calls, int):
+        calls = []
     return [e.get("usage") or {} for e in calls]
 
 

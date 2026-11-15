@@ -1,12 +1,28 @@
-"""A1-A5 из ДЗ1 (вариант C). Модель и сбои инструментов заменены контролируемыми заглушками.
-Живая модель НЕ используется: тесты проверяют программу (цикл, проверки, журнал), а не качество модели."""
+"""Единый приёмочный набор A1-A5 по таблице задания (вариант C), годный для любой реализации агента.
+Модель и сбои инструментов заменены контролируемыми заглушками. Живая модель НЕ используется:
+тесты проверяют программу (цикл, проверки, журнал), а не качество модели.
+
+Папка реализации (где лежат agent.py, config.json, docs.json) задаётся первым аргументом или AGENT_DIR:
+    python3 acceptance/test_a1_a5.py direct -v
+    AGENT_DIR=opus/with-spec python3 acceptance/test_a1_a5.py -v
+"""
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+    AGENT_DIR = sys.argv.pop(1)
+else:
+    AGENT_DIR = os.environ.get("AGENT_DIR")
+if not AGENT_DIR:
+    sys.exit("Укажите папку реализации: аргумент или переменная окружения AGENT_DIR.")
+AGENT_DIR = Path(AGENT_DIR).resolve()
+if not (AGENT_DIR / "agent.py").is_file():
+    sys.exit(f"В {AGENT_DIR} нет agent.py.")
+sys.path.insert(0, str(AGENT_DIR))
 import agent  # noqa: E402
 
 CFG = agent.load_config()

@@ -1,5 +1,5 @@
---- a/sonnet/direct/agent.py
-+++ b/sonnet/direct/agent.py
+--- a/direct/agent.py
++++ b/live-local/agent.py
 @@ -15,6 +15,9 @@
  from urllib.request import Request, build_opener, HTTPRedirectHandler
  

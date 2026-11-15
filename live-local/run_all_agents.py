@@ -1,4 +1,4 @@
-"""Прогон всех шести реализаций агента на локальной модели LM Studio.
+"""Прогон всех четырёх реализаций агента на локальной модели LM Studio.
 
 Для каждой реализации agent.py, config.json, docs.json копируются во временную папку вне репозитория.
 К копии применяются те же по смыслу правки, что в live-local/agent.py относительно direct/agent.py:
@@ -24,7 +24,6 @@ OUT = REPO / "logs-live" / "agents"
 CONFIG = REPO / "live-local" / "config.qwen.json"
 IMPLEMENTATIONS = {  # имя -> папка
     "direct": "direct", "with-spec": "with-spec",
-    "sonnet-direct": "sonnet/direct", "sonnet-with-spec": "sonnet/with-spec",
     "opus-direct": "opus/direct", "opus-with-spec": "opus/with-spec",
 }
 QUESTIONS = {  # тексты из live-local/run_set.sh и agent.QUESTION

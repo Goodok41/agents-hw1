@@ -9,7 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import agent  # noqa: E402
-from test_agent import CFG, Script, call, run, text, tools  # noqa: E402
+from stubs import CFG, Script, call, run, text, tools  # noqa: E402
 
 
 class FakeResponse:

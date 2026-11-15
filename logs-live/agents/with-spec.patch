@@ -31,7 +31,7 @@
          raise AgentError("Проверьте model в config.json.")
      return cfg
  
-@@ -97,8 +104,9 @@
+@@ -104,8 +111,9 @@
                     "max_tokens": cfg["max_output_tokens"], "temperature": 0}
          if tools:
              payload.update(tools=tools, tool_choice="auto")
@@ -43,7 +43,7 @@
          request = Request(cfg["api_base"] + "/chat/completions", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers)
          try:
              with build_opener(NoRedirect()).open(request, timeout=cfg["timeout_seconds"]) as response:
-@@ -241,7 +249,7 @@
+@@ -227,7 +235,7 @@
              mode, question, model_fn = "REPLAY", QUESTION, make_replay_model()
              print("REPLAY: фиксированные решения модели. Инструменты выполняются локально. Новая инструкция этой записью не проверяется.")
          else:

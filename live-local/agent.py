@@ -90,7 +90,7 @@ def run_allowed_tool(name, arguments, docs):
         return {"documents": [{"id": d["id"], "title": d["title"], "snippet": d["text"][:140]} for score, d in ranked[:4] if score]}
     doc = next((d for d in docs if d["id"] == args["doc_id"]), None)
     if doc is None:
-        return {"error": {"code": "not_found", "message": "Документ с таким ID не найден."}}
+        return {"error": {"code": "not_found", "message": "Документ с таким ID не найден.", "doc_id": args["doc_id"]}}
     return {"id": doc["id"], "title": doc["title"], "version": doc.get("version", "учебная"),
             "lines": [{"line": i, "text": line} for i, line in enumerate(doc["text"].splitlines(), 1)]}
 
@@ -132,31 +132,33 @@ def make_live_model(cfg, key):
             raise AgentError("Неожиданный формат ответа API.") from None
     return call_model
 
-MAX_CORRECTIONS = 2
-
-def _doc_id_from(arguments):
+def run_tool_safely(name, arguments, docs):
+    """R2: исключение инструмента превращается в структурированный результат."""
     try:
-        value = json.loads(arguments).get("doc_id")
-    except (TypeError, ValueError, AttributeError):
-        return None
-    return value if isinstance(value, str) else None
+        return run_allowed_tool(name, arguments, docs)
+    except Exception as exc:
+        return {"error": {"code": "tool_failure", "message": f"Сбой инструмента: {type(exc).__name__}."}}
 
-def summarize_trace(trace):
-    """Итоги для журнала: прочитанные ID, отсутствующие ID, число ошибок инструментов."""
+def summarize_tools(trace):
+    """R3: прочитанные ID (по возрастанию), отсутствующие ID, число ошибок инструментов."""
     tools = [e for e in trace if e["event"] == "tool"]
     read_ids = sorted({e["result"]["id"] for e in tools if e["name"] == "read_doc" and e["status"] == "ok"})
-    missing = sorted({_doc_id_from(e["arguments"]) for e in tools
-                      if e["name"] == "read_doc" and e["result"].get("error", {}).get("code") == "not_found"} - {None})
-    return {"read_ids": read_ids, "missing_ids": missing, "tool_errors": sum(e["status"] == "error" for e in tools)}
+    missing = set()
+    for e in tools:
+        err = e["result"].get("error")
+        if e["name"] == "read_doc" and isinstance(err, dict) and err.get("code") == "not_found" and isinstance(err.get("doc_id"), str):
+            missing.add(err["doc_id"])
+    return read_ids, sorted(missing), sum(1 for e in tools if e["status"] == "error")
 
 def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
     docs = load_docs()
     history = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}]
-    trace, tool_count, corrections = [], 0, 0
+    trace, tool_count, rejections = [], 0, 0
 
     def finish(stop_reason, model_calls, answer=None):
-        return {"mode": mode, "question": question, "stop_reason": stop_reason, "model_calls": model_calls,
-                "tool_calls": tool_count, "answer": answer, **summarize_trace(trace), "trace": trace}
+        read_ids, missing_ids, tool_errors = summarize_tools(trace)
+        return {"mode": mode, "question": question, "stop_reason": stop_reason, "model_calls": model_calls, "tool_calls": tool_count,
+                "answer": answer, "read_ids": read_ids, "missing_ids": missing_ids, "tool_errors": tool_errors, "trace": trace}
 
     for step in range(cfg["max_model_calls"]):
         reply, usage = model_fn(history, TOOLS)
@@ -169,22 +171,23 @@ def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
             answer = reply.get("content")
             if not isinstance(answer, str) or not answer.strip():
                 raise AgentError("Модель не вернула текст или действие.")
-            read_ids = set(summarize_trace(trace)["read_ids"])
+            read_ids = set(summarize_tools(trace)[0])
             cited_ids = set(re.findall(r"[\[(](D\d{2})(?=[:\])])", answer))
-            unread = sorted(cited_ids - read_ids)
             searched = any(event["event"] == "tool" and event["name"] == "search_docs" for event in trace)
-            found_docs = any(event["event"] == "tool" and event["name"] == "search_docs" and event["result"].get("documents") for event in trace)
-            if not searched or unread or (found_docs and not read_ids):
-                trace.append({"event": "validation", "error": "unread_sources", "unread_ids": unread})
-                if corrections >= MAX_CORRECTIONS:
-                    emit("[проверка] Источники не подтверждены. Остановка без ответа.")
+            found_ids = {d["id"] for event in trace if event["event"] == "tool" and event["name"] == "search_docs" for d in event["result"].get("documents", [])}
+            unverified = cited_ids - read_ids
+            if not searched or unverified or (found_ids and not read_ids):
+                if rejections >= 2:
+                    emit("[проверка] Источники не подтверждены. Ответ не выдаётся.")
+                    trace.append({"event": "validation", "error": "unverified_sources", "ids": sorted(unverified)})
                     return finish("unverified_sources", step + 1)
-                corrections += 1
+                rejections += 1
+                ids = sorted(unverified or found_ids - read_ids)
                 emit("[проверка] Источники ещё не прочитаны. Нужен read_doc.")
-                note = ("Проверка программы: для подтверждения ответа сначала нужен search_docs, затем read_doc найденных документов. "
-                        "Нельзя ссылаться на номера строк по поисковому сниппету.")
-                if unread:
-                    note += " Не прочитаны успешно: " + ", ".join(unread) + ". Не ссылайтесь на них; если документа нет, так и скажите."
+                trace.append({"event": "validation", "error": "unread_sources", "ids": ids})
+                note = "Проверка программы: для подтверждения ответа сначала нужен search_docs, затем read_doc найденных документов. Нельзя ссылаться на номера строк по поисковому сниппету."
+                if ids:
+                    note += " Не прочитаны успешно: " + ", ".join(ids) + "."
                 history.extend([reply, {"role": "user", "content": note}])
                 continue
             return finish("final_answer", step + 1, answer)
@@ -201,15 +204,11 @@ def run_agent(question, cfg, model_fn, mode="LIVE", emit=print):
         history.append({"role": "assistant", "content": reply.get("content"), "tool_calls": calls})
         for call in calls:
             fn = call["function"]
-            try:
-                result = run_allowed_tool(fn["name"], fn["arguments"], docs)
-            except Exception as exc:  # сбой инструмента не должен ронять агента
-                result = {"error": {"code": "tool_failure", "message": f"Сбой инструмента ({type(exc).__name__})."}}
-            status = "error" if "error" in result else "ok"
+            result = run_tool_safely(fn["name"], fn["arguments"], docs)
             tool_count += 1
-            emit(f"[инструмент {tool_count}] {fn['name']} {fn['arguments']} -> {status}")
+            emit(f"[инструмент {tool_count}] {fn['name']} {fn['arguments']}")
             emit(json.dumps(result, ensure_ascii=False))
-            trace.append({"event": "tool", "name": fn["name"], "arguments": fn["arguments"], "status": status, "result": result})
+            trace.append({"event": "tool", "name": fn["name"], "arguments": fn["arguments"], "status": "error" if "error" in result else "ok", "result": result})
             history.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
     return finish("budget_exhausted", cfg["max_model_calls"])
 
@@ -256,6 +255,8 @@ def main():
         result = run_agent(question, cfg, model_fn, mode)
         print("\nstop_reason:", result["stop_reason"])
         print("Ответ:", result["answer"] or "Финального ответа нет. Работа остановлена по ограничению.")
+        print("Вызовы:", f"модель={result['model_calls']}, инструменты={result['tool_calls']}, ошибок={result['tool_errors']}")
+        print("read_ids:", result["read_ids"], "missing_ids:", result["missing_ids"])
         if args.output:
             Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             print("Трасса сохранена:", args.output)

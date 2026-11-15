@@ -1,132 +1,205 @@
-"""A1-A5 из ДЗ1 (вариант C). Модель и сбои инструментов заменены контролируемыми заглушками.
-Живая модель НЕ используется: тесты проверяют программу (цикл, проверки, журнал), а не качество модели."""
+"""Тесты агента DemoDesk (A1-A5 из change-brief.md + регрессия --replay). Без сети, модель - заглушка."""
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 import agent  # noqa: E402
 
-CFG = agent.load_config()
 _n = 0
 
 def call(name, **args):
     global _n
     _n += 1
-    raw = args.pop("_raw", None)
-    return {"id": f"call_t{_n}", "type": "function",
-            "function": {"name": name, "arguments": raw if raw is not None else json.dumps(args, ensure_ascii=False)}}
+    return {"id": f"c{_n}", "type": "function", "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}}
 
-def tools(*calls):
+def raw_call(name, arguments):
+    global _n
+    _n += 1
+    return {"id": f"c{_n}", "type": "function", "function": {"name": name, "arguments": arguments}}
+
+def tools_reply(*calls):
     return {"role": "assistant", "content": None, "tool_calls": list(calls)}
 
-def text(s):
-    return {"role": "assistant", "content": s}
+def text_reply(text):
+    return {"role": "assistant", "content": text}
 
-class Script:
-    """Заглушка модели: отдаёт заранее заданные ответы и запоминает историю."""
-    def __init__(self, *replies, repeat_last=False):
-        self.replies, self.repeat_last, self.histories = list(replies), repeat_last, []
-    def __call__(self, history, tool_defs):
-        self.histories.append(list(history))
-        if len(self.histories) > len(self.replies):
-            if self.repeat_last:
-                return self.replies[-1], {}
-            raise AssertionError("заглушка исчерпана")
-        return self.replies[len(self.histories) - 1], {}
+class Stub:
+    """Выдаёт заранее заданные ответы; после конца списка повторяет последний (или падает, если repeat=False)."""
+    def __init__(self, replies, repeat=False):
+        self.replies, self.repeat, self.calls = list(replies), repeat, 0
+    def __call__(self, history, tools):
+        self.calls += 1
+        if self.calls <= len(self.replies):
+            return self.replies[self.calls - 1], {}
+        if self.repeat:
+            return self.replies[-1], {}
+        raise AssertionError("Модель вызвана больше, чем предусмотрено сценарием")
 
-def run(model, cfg=None):
-    return agent.run_agent("тест", cfg or CFG, model, "STUB", emit=lambda *_: None)
+def run(replies, question="q", repeat=False, **cfg_over):
+    cfg = {**agent.load_config(), **cfg_over}
+    stub = Stub(replies, repeat)
+    result = agent.run_agent(question, cfg, stub, "TEST", emit=lambda *_: None)
+    return result, stub
 
-class A1_SearchAndRead(unittest.TestCase):
-    def test_answer_confirmed_by_read_docs(self):
-        r = run(Script(tools(call("search_docs", query="скан OCR внешний API")),
-                       tools(call("read_doc", doc_id="D01"), call("read_doc", doc_id="D02")),
-                       text("После OCR проверьте данные [D01:1-2]. Перед API уберите персональные данные [D02:1-2].")))
-        self.assertEqual(r["stop_reason"], "final_answer")
-        self.assertEqual(r["read_ids"], ["D01", "D02"])
-        self.assertEqual((r["missing_ids"], r["tool_errors"]), ([], 0))
-        self.assertTrue(all(e["status"] == "ok" for e in r["trace"] if e["event"] == "tool"))
+def tool_events(result, name=None):
+    return [e for e in result["trace"] if e["event"] == "tool" and (name is None or e["name"] == name)]
 
-    def test_snippet_only_answer_is_sent_back_then_accepted(self):
-        m = Script(tools(call("search_docs", query="скан OCR")),
-                   text("Проверьте числа после OCR [D01:1-2]."),
-                   tools(call("read_doc", doc_id="D01")),
-                   text("Проверьте числа после OCR [D01:1-2]."))
-        r = run(m)
-        self.assertEqual(r["stop_reason"], "final_answer")
-        self.assertIn("D01", m.histories[2][-1]["content"])
+class TestA(unittest.TestCase):
+    def test_a1_ocr_then_external_api(self):
+        result, _ = run([
+            tools_reply(call("search_docs", query="проверить после OCR и перед внешним API")),
+            tools_reply(call("read_doc", doc_id="D01"), call("read_doc", doc_id="D02")),
+            text_reply("После OCR проверьте числа, даты и имена (D01:2). Перед внешним API уберите персональные данные (D02:1)."),
+        ], "Что проверить после OCR и перед внешним API?")
+        self.assertEqual(result["stop_reason"], "final_answer")
+        self.assertEqual(result["read_ids"], ["D01", "D02"])
+        self.assertEqual(result["missing_ids"], [])
+        self.assertEqual(result["tool_errors"], 0)
+        self.assertIn("D01:2", result["answer"])
+        self.assertIn("D02:1", result["answer"])
+        found = {d["id"] for d in tool_events(result, "search_docs")[0]["result"]["documents"]}
+        self.assertTrue({"D01", "D02"} <= found)
+        self.assertTrue(all(e["status"] == "ok" for e in tool_events(result)))
 
-class A2_NoAnswerInCorpus(unittest.TestCase):
-    def test_price_absent_in_d03(self):
-        r = run(Script(tools(call("search_docs", query="цена лицензия DemoDesk")),
-                       tools(call("read_doc", doc_id="D03")),
-                       text("В корпусе нет сведений о цене лицензии DemoDesk [D03:1-4].")))
-        self.assertEqual(r["stop_reason"], "final_answer")
-        self.assertEqual(r["read_ids"], ["D03"])
-        self.assertIn("нет сведений", r["answer"])
-        doc = next(d for d in agent.load_docs() if d["id"] == "D03")
-        self.assertNotRegex(doc["text"], r"\d+\s*(руб|₽|\$|USD)")  # в самом корпусе цены нет
+    def test_a2_no_price_in_corpus(self):
+        result, _ = run([
+            tools_reply(call("search_docs", query="цена лицензия DemoDesk")),
+            tools_reply(call("read_doc", doc_id="D03")),
+            text_reply("В корпусе нет сведений о цене лицензии DemoDesk: тариф не указан (D03:3)."),
+        ], "Сколько стоит лицензия DemoDesk?")
+        self.assertEqual(result["stop_reason"], "final_answer")
+        self.assertEqual(result["read_ids"], ["D03"])
+        self.assertIn("нет сведений", result["answer"])
+        self.assertNotRegex(result["answer"], r"\d+\s*(руб|₽|\$|USD|евро)")
+        d03 = tool_events(result, "read_doc")[0]["result"]
+        self.assertFalse(any("руб" in l["text"] for l in d03["lines"]))
 
-class A3_UnknownIdAndBadArguments(unittest.TestCase):
-    def test_structured_errors_without_crash(self):
-        r = run(Script(tools(call("search_docs", query="прокси")),
-                       tools(call("read_doc", doc_id="D99"), call("read_doc", _raw="не json"),
-                             call("read_doc", wrong="D01"), call("shell", cmd="ls"), call("read_doc", doc_id="D07")),
-                       text("Документа D99 в корпусе нет, сведений о прокси нет [D07:1-3].")))
-        results = [e["result"] for e in r["trace"] if e["event"] == "tool"][1:]
-        self.assertEqual([x.get("error", {}).get("code") for x in results], ["not_found", "bad_arguments", "bad_arguments", "unknown_tool", None])
-        self.assertEqual(r["missing_ids"], ["D99"])
-        self.assertEqual((r["stop_reason"], r["tool_errors"], r["read_ids"]), ("final_answer", 4, ["D07"]))
-        self.assertTrue(all("lines" not in x for x in results[:4]))  # содержимое D99 не выдумано
+    def test_a3_unknown_id_and_bad_arguments(self):
+        result, _ = run([
+            tools_reply(call("search_docs", query="прокси")),
+            tools_reply(call("read_doc", doc_id="D07"), call("read_doc", doc_id="D99"),
+                        raw_call("read_doc", "не json"),
+                        call("read_doc", doc_id="D01", extra=1),
+                        call("search_docs", query=""),
+                        raw_call("run_shell", "{}")),
+            text_reply("Документ D99 в корпусе отсутствует, сведений о настройке прокси нет."),
+        ])
+        self.assertEqual(result["stop_reason"], "final_answer")
+        self.assertEqual(result["missing_ids"], ["D99"])
+        self.assertEqual(result["read_ids"], ["D07"])
+        self.assertEqual(result["tool_errors"], 5)
+        events = tool_events(result)[2:]
+        self.assertEqual([e["status"] for e in events], ["error"] * 5)
+        self.assertEqual([e["result"]["error"]["code"] for e in events],
+                         ["not_found", "bad_arguments", "bad_arguments", "bad_arguments", "unknown_tool"])
+        self.assertEqual(events[0]["result"]["error"]["doc_id"], "D99")
+        for e in events:
+            self.assertNotIn("lines", e["result"])
+            self.assertNotIn("title", e["result"])
 
-    def test_citing_missing_doc_is_never_accepted(self):
-        lie = text("Прокси настраивается так [D99:1-2].")
-        r = run(Script(tools(call("search_docs", query="прокси")), tools(call("read_doc", doc_id="D99")), lie, lie, lie))
-        self.assertEqual((r["stop_reason"], r["answer"], r["missing_ids"]), ("unverified_sources", None, ["D99"]))
+    def test_a3_citing_unknown_id_is_not_issued(self):
+        fake = text_reply("Прокси настраивается так (D99:1).")
+        result, stub = run([tools_reply(call("search_docs", query="прокси")),
+                            tools_reply(call("read_doc", doc_id="D99")), fake], repeat=True)
+        self.assertEqual(result["stop_reason"], "unverified_sources")
+        self.assertIsNone(result["answer"])
+        self.assertEqual(result["missing_ids"], ["D99"])
 
-class A4_ToolFailure(unittest.TestCase):
-    def test_failure_is_logged_and_agent_recovers(self):
-        real, state = agent.run_allowed_tool, {"n": 0}
+    def test_a4_read_doc_failure_then_recovery(self):
+        real = agent.run_allowed_tool
+        state = {"failed": False}
         def flaky(name, arguments, docs):
-            if name == "read_doc":
-                state["n"] += 1
-                if state["n"] == 1:
-                    raise RuntimeError("секретный-ключ-не-должен-попасть-в-журнал")
+            if name == "read_doc" and not state["failed"]:
+                state["failed"] = True
+                raise RuntimeError("искусственный сбой")
             return real(name, arguments, docs)
         with mock.patch.object(agent, "run_allowed_tool", flaky):
-            r = run(Script(tools(call("search_docs", query="скан")), tools(call("read_doc", doc_id="D01")),
-                           tools(call("read_doc", doc_id="D01")), text("После OCR проверьте данные [D01:1-2].")))
-        self.assertEqual((r["stop_reason"], r["tool_errors"], r["read_ids"]), ("final_answer", 1, ["D01"]))
-        failed = [e for e in r["trace"] if e["event"] == "tool" and e["status"] == "error"]
-        self.assertEqual(failed[0]["result"]["error"]["code"], "tool_failure")
-        self.assertNotIn("секретный", json.dumps(r, ensure_ascii=False))
+            result, _ = run([
+                tools_reply(call("search_docs", query="скан OCR")),
+                tools_reply(call("read_doc", doc_id="D01")),
+                tools_reply(call("read_doc", doc_id="D01")),
+                text_reply("После OCR проверьте числа, даты и имена (D01:2)."),
+            ])
+        self.assertEqual(result["stop_reason"], "final_answer")
+        self.assertEqual(result["tool_errors"], 1)
+        self.assertEqual(result["read_ids"], ["D01"])
+        failed = tool_events(result, "read_doc")[0]
+        self.assertEqual(failed["status"], "error")
+        self.assertEqual(failed["result"]["error"]["code"], "tool_failure")
 
-    def test_persistent_failure_ends_with_clear_status(self):
+    def test_a4_persistent_failure_ends_with_clear_status(self):
+        real = agent.run_allowed_tool
         def broken(name, arguments, docs):
-            raise OSError("диск недоступен")
+            if name == "read_doc":
+                raise RuntimeError("искусственный сбой")
+            return real(name, arguments, docs)
         with mock.patch.object(agent, "run_allowed_tool", broken):
-            r = run(Script(tools(call("read_doc", doc_id="D01")), repeat_last=True))
-        self.assertIn(r["stop_reason"], {"budget_exhausted", "tool_budget_exhausted"})
-        self.assertIsNone(r["answer"])
-        self.assertGreaterEqual(r["tool_errors"], 1)
+            result, _ = run([
+                tools_reply(call("search_docs", query="скан OCR")),
+                tools_reply(call("read_doc", doc_id="D01")),
+                text_reply("После OCR проверьте числа (D01:2)."),
+            ], repeat=True)
+        self.assertEqual(result["stop_reason"], "unverified_sources")
+        self.assertIsNone(result["answer"])
+        self.assertEqual(result["read_ids"], [])
+        self.assertEqual(result["tool_errors"], 1)
 
-class A5_LimitStopsLoop(unittest.TestCase):
-    def test_model_call_limit(self):
-        r = run(Script(tools(call("search_docs", query="скан")), repeat_last=True), {**CFG, "max_model_calls": 2})
-        self.assertEqual((r["stop_reason"], r["model_calls"], r["answer"]), ("budget_exhausted", 2, None))
+    def test_a5_model_call_limit(self):
+        result, stub = run([tools_reply(call("search_docs", query="скан"))], repeat=True, max_model_calls=2)
+        self.assertEqual(result["stop_reason"], "budget_exhausted")
+        self.assertIsNone(result["answer"])
+        self.assertEqual(stub.calls, 2)
+        self.assertEqual(result["model_calls"], 2)
 
-    def test_tool_call_limit(self):
-        r = run(Script(tools(call("search_docs", query="скан"), call("search_docs", query="api")), repeat_last=True),
-                {**CFG, "max_tool_calls": 1})
-        self.assertEqual((r["stop_reason"], r["tool_calls"], r["answer"]), ("tool_budget_exhausted", 0, None))
+    def test_a5_tool_call_limit(self):
+        result, stub = run([tools_reply(call("search_docs", query="скан"), call("search_docs", query="api"))],
+                           repeat=True, max_tool_calls=3)
+        self.assertEqual(result["stop_reason"], "tool_budget_exhausted")
+        self.assertIsNone(result["answer"])
+        self.assertLessEqual(result["tool_calls"], 3)
+        self.assertEqual(stub.calls, 2)
 
-class Regression_Replay(unittest.TestCase):
-    def test_replay_still_works(self):
-        r = agent.run_agent(agent.QUESTION, CFG, agent.make_replay_model(), "REPLAY", emit=lambda *_: None)
-        self.assertEqual((r["stop_reason"], r["read_ids"], r["model_calls"]), ("final_answer", ["D01", "D02"], 4))
+class TestR4(unittest.TestCase):
+    def test_at_most_two_remarks_with_concrete_ids(self):
+        seen = []
+        replies = [tools_reply(call("search_docs", query="скан")), text_reply("Ответ (D01:1).")]
+        stub = Stub(replies, repeat=True)
+        def model(history, tools):
+            seen.append(list(history))
+            return stub(history, tools)
+        cfg = agent.load_config()
+        result = agent.run_agent("q", cfg, model, "TEST", emit=lambda *_: None)
+        self.assertEqual(result["stop_reason"], "unverified_sources")
+        self.assertIsNone(result["answer"])
+        remarks = [m for m in seen[-1] if m["role"] == "user" and m["content"].startswith("Проверка программы")]
+        self.assertEqual(len(remarks), 2)
+        self.assertTrue(all("D01" in m["content"] for m in remarks))
+
+class TestRegression(unittest.TestCase):
+    def test_replay_cli_unchanged(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "agent.py"), "--replay"], capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("stop_reason: final_answer", proc.stdout)
+        self.assertIn("(D01:1-3)", proc.stdout)
+        self.assertIn("(D02:1-2)", proc.stdout)
+
+    def test_replay_run_agent(self):
+        result = agent.run_agent(agent.QUESTION, agent.load_config(), agent.make_replay_model(), "REPLAY", emit=lambda *_: None)
+        self.assertEqual(result["stop_reason"], "final_answer")
+        self.assertEqual(result["model_calls"], 4)
+        self.assertEqual(result["tool_calls"], 4)
+        self.assertEqual(result["read_ids"], ["D01", "D02"])
+        self.assertEqual(result["missing_ids"], [])
+        self.assertEqual(result["tool_errors"], 0)
+        self.assertEqual([e["error"] for e in result["trace"] if e["event"] == "validation"], ["unread_sources"])
+
+    def test_tool_interface_unchanged(self):
+        self.assertEqual([t["function"]["name"] for t in agent.TOOLS], ["search_docs", "read_doc"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

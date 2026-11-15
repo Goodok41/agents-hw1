@@ -1,6 +1,6 @@
 {
   "question": "Сколько стоит лицензия DemoDesk и какой у неё тариф? Укажи источники.",
-  "seconds": 13.3,
+  "seconds": 12.5,
   "error_type": null,
   "stop_reason": "final_answer",
   "model_calls_observed": 3,

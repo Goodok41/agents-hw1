@@ -1,10 +1,10 @@
 {
-  "qwen_A1": 68.4,
-  "qwen_A2": 13.6,
-  "qwen_B4": 70.7,
-  "qwen_B3": 11.4,
+  "qwen_A1": 51.5,
+  "qwen_A2": 12.5,
+  "qwen_B4": 39.4,
+  "qwen_B3": 10.6,
   "gemma_A1": 20.1,
-  "gemma_A2": 6.1,
-  "gemma_B4": 56.6,
+  "gemma_A2": 6.0,
+  "gemma_B4": 70.8,
   "gemma_B3": 12.5
 }
